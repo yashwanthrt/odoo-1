@@ -91,8 +91,6 @@ class OdooService:
     def get_partners(self, role="customer", limit=100):
         uid = self.authenticate()
         role = self._normalize_role(role)
-        except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
         if role == "vendor":
             domain = [["supplier_rank", ">", 0]]
