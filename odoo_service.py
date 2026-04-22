@@ -19,23 +19,37 @@ class Config:
         url = (os.getenv("ODOO_URL") or "").strip()
         db = (os.getenv("ODOO_DB") or "").strip()
         username = (os.getenv("ODOO_USERNAME") or "").strip()
-        password = (os.getenv("ODOO_PASSWORD") or "").strip()
+        password = os.getenv("ODOO_PASSWORD") or ""
 
-        if url and db and username and password:
+        missing = []
+
+        if not url:
+            missing.append("ODOO_URL")
+        if not db:
+            missing.append("ODOO_DB")
+        if not username:
+            missing.append("ODOO_USERNAME")
+        if not password:
+            missing.append("ODOO_PASSWORD")
+
+        if not missing:
             return url, db, username, password
 
-        # fallback to config.json
+        # fallback
         try:
-            with open("config.json") as f:
-                data = json.load(f)
-                return (
-                    data["ODOO_URL"].strip(),
-                    data["ODOO_DB"].strip(),
-                    data["ODOO_USERNAME"].strip(),
-                    data["ODOO_PASSWORD"].strip(),
-                )
+            if os.path.exists("config.json"):
+                with open("config.json") as f:
+                    data = json.load(f)
+                    return (
+                        data["ODOO_URL"].strip(),
+                        data["ODOO_DB"].strip(),
+                        data["ODOO_USERNAME"].strip(),
+                        data["ODOO_PASSWORD"],
+                    )
         except Exception:
-            raise RuntimeError("Odoo configuration not found")
+            pass
+
+        raise RuntimeError(f"Missing config: {', '.join(missing)}")
 
 
 ODOO_URL, ODOO_DB, ODOO_USERNAME, ODOO_PASSWORD = Config.get()
@@ -56,9 +70,6 @@ class OdooService:
         self._common = xmlrpc.client.ServerProxy(f"{self.url}/xmlrpc/2/common")
         self._models = xmlrpc.client.ServerProxy(f"{self.url}/xmlrpc/2/object")
 
-    # -----------------------
-    # Auth (cached)
-    # -----------------------
     def authenticate(self):
         if self._uid:
             return self._uid
@@ -76,21 +87,8 @@ class OdooService:
         self._uid = uid
         return uid
 
-    # -----------------------
-    def _normalize_role(self, role: str):
-        role = role.strip().lower()
-        if role.endswith("s"):
-            role = role[:-1]
-
-        if role not in ["customer", "vendor", "all"]:
-            raise HTTPException(status_code=400, detail="Invalid role")
-
-        return role
-
-    # -----------------------
     def get_partners(self, role="customer", limit=100):
         uid = self.authenticate()
-        role = self._normalize_role(role)
 
         if role == "vendor":
             domain = [["supplier_rank", ">", 0]]
@@ -115,7 +113,6 @@ class OdooService:
             {"fields": ["id", "name", "email", "phone", "mobile", "company_type", "vat"]}
         )
 
-    # -----------------------
     def create_partner(self, data):
         uid = self.authenticate()
 
@@ -137,7 +134,6 @@ class OdooService:
 
         return {"id": partner_id}
 
-    # -----------------------
     def update_partner(self, partner_id, data):
         uid = self.authenticate()
 
@@ -163,7 +159,6 @@ class OdooService:
 
         return {"updated": True}
 
-    # -----------------------
     def delete_partner(self, partner_id):
         uid = self.authenticate()
 
@@ -175,11 +170,9 @@ class OdooService:
 
         return {"deleted": True}
 
-    # -----------------------
     def get_customers(self, limit=100):
         return self.get_partners("customer", limit)
 
-    # -----------------------
     def verify_auth(self):
         uid = self.authenticate()
         return {"authenticated": True, "uid": uid}
