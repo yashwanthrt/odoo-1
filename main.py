@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
 from pydantic import BaseModel, EmailStr
@@ -7,6 +8,17 @@ from typing import Optional, List, Literal
 from odoo_service import OdooService
 
 app = FastAPI()
+
+# -----------------------
+# CORS (important for frontend)
+# -----------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # -----------------------
 # Odoo Service
@@ -88,7 +100,7 @@ def get_db():
 
 
 # -----------------------
-# Local Item APIs
+# Local APIs
 # -----------------------
 @app.post("/items/", response_model=ItemResponse)
 def create_item(item: ItemCreate, db: Session = Depends(get_db)):
@@ -105,22 +117,22 @@ def get_items(db: Session = Depends(get_db)):
 
 
 # -----------------------
-# Odoo APIs
+# Odoo APIs (NOW SHOW REAL ERRORS)
 # -----------------------
 @app.get("/odoo/partners")
 def get_odoo_partners(role: Literal["customer", "vendor", "all"] = "customer", limit: int = 100):
     try:
         return odoo_service.get_partners(role=role, limit=limit)
-    except Exception:
-        raise HTTPException(status_code=500, detail="Internal server error")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/odoo/customers")
 def get_odoo_customers(limit: int = 100):
     try:
         return odoo_service.get_customers(limit=limit)
-    except Exception:
-        raise HTTPException(status_code=500, detail="Internal server error")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/odoo/partners")
@@ -129,8 +141,8 @@ def create_odoo_partner(partner: PartnerCreate):
         return odoo_service.create_partner(
             partner.model_dump(exclude_none=True)
         )
-    except Exception:
-        raise HTTPException(status_code=500, detail="Internal server error")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.put("/odoo/partners/{partner_id}")
@@ -140,21 +152,35 @@ def update_odoo_partner(partner_id: int, partner: PartnerUpdate):
             partner_id,
             partner.model_dump(exclude_none=True)
         )
-    except Exception:
-        raise HTTPException(status_code=500, detail="Internal server error")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.delete("/odoo/partners/{partner_id}")
 def delete_odoo_partner(partner_id: int):
     try:
         return odoo_service.delete_partner(partner_id)
-    except Exception:
-        raise HTTPException(status_code=500, detail="Internal server error")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/odoo/auth-verify")
 def verify_odoo_auth():
     try:
         return odoo_service.verify_auth()
-    except Exception:
-        raise HTTPException(status_code=500, detail="Internal server error")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# -----------------------
+# DEBUG (VERY IMPORTANT)
+# -----------------------
+@app.get("/debug-env")
+def debug_env():
+    import os
+    return {
+        "url": os.getenv("ODOO_URL"),
+        "db": os.getenv("ODOO_DB"),
+        "user": os.getenv("ODOO_USERNAME"),
+        "password_exists": bool(os.getenv("ODOO_PASSWORD"))
+    }
